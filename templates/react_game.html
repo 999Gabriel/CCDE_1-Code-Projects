@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Millionaire Game - React</title>
+    <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+    <script src="https://unpkg.com/babel-standalone@6/babel.min.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { padding-top: 20px; background-color: #f8f9fa; }
+        .game-container { max-width: 800px; margin: 0 auto; }
+        .question-card { margin-bottom: 20px; }
+        .answer-btn { width: 100%; margin-bottom: 10px; text-align: left; }
+        .status-bar { display: flex; justify-content: space-between; margin-bottom: 20px; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        function App() {
+            const [gameState, setGameState] = useState('start'); // start, playing, gameover, win
+            const [question, setQuestion] = useState(null);
+            const [score, setScore] = useState(0);
+            const [level, setLevel] = useState(0);
+            const [loading, setLoading] = useState(false);
+            const [message, setMessage] = useState('');
+
+            const startGame = async () => {
+                setLoading(true);
+                try {
+                    const res = await fetch('/api/start', { method: 'POST' });
+                    const data = await res.json();
+                    if (data.status === 'started') {
+                        setScore(0);
+                        setLevel(0);
+                        setGameState('playing');
+                        fetchQuestion();
+                    }
+                } catch (err) {
+                    console.error(err);
+                    setMessage('Error starting game');
+                } finally {
+                    setLoading(false);
+                }
+            };
+
+            const fetchQuestion = async () => {
+                setLoading(true);
+                try {
+                    const res = await fetch('/api/question');
+                    const data = await res.json();
+
+                    if (data.status === 'win') {
+                        setGameState('win');
+                        setScore(data.score);
+                    } else if (data.error) {
+                        setMessage(data.error);
+                    } else {
+                        setQuestion(data);
+                    }
+                } catch (err) {
+                    console.error(err);
+                    setMessage('Error fetching question');
+                } finally {
+                    setLoading(false);
+                }
+            };
+
+            const submitAnswer = async (index) => {
+                setLoading(true);
+                try {
+                    const res = await fetch('/api/answer', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ answer_index: index })
+                    });
+                    const data = await res.json();
+
+                    if (data.correct) {
+                        setScore(data.score);
+                        setLevel(data.level);
+                        setMessage('Correct! Next question...');
+                        setTimeout(() => {
+                            setMessage('');
+                            fetchQuestion();
+                        }, 1000);
+                    } else if (data.game_over) {
+                        setScore(data.score);
+                        setGameState('gameover');
+                    }
+                } catch (err) {
+                    console.error(err);
+                    setMessage('Error submitting answer');
+                } finally {
+                    setLoading(false);
+                }
+            };
+
+            if (loading && !question && gameState === 'playing') return <div className="text-center mt-5">Loading...</div>;
+
+            return (
+                <div className="game-container container">
+                    <h1 className="text-center mb-4">Millionaire Game (React UI)</h1>
+
+                    {gameState === 'start' && (
+                        <div className="card text-center p-5">
+                            <h2>Welcome to Millionaire!</h2>
+                            <p className="lead">Test your knowledge and win big!</p>
+                            <button className="btn btn-primary btn-lg mt-3" onClick={startGame}>Start Game</button>
+                        </div>
+                    )}
+
+                    {gameState === 'playing' && question && (
+                        <div>
+                            <div className="status-bar alert alert-info">
+                                <span>Level: {level}</span>
+                                <span>Score: {score}</span>
+                            </div>
+
+                            {message && <div className="alert alert-warning">{message}</div>}
+
+                            <div className="card question-card">
+                                <div className="card-body">
+                                    <h3 className="card-title">Question {level + 1}</h3>
+                                    <p className="card-text lead">{question.text}</p>
+                                </div>
+                            </div>
+
+                            <div className="row">
+                                {question.answers.map((ans, idx) => (
+                                    <div key={idx} className="col-md-6">
+                                        <button
+                                            className="btn btn-outline-primary answer-btn"
+                                            onClick={() => submitAnswer(idx)}
+                                            disabled={loading}
+                                        >
+                                            {String.fromCharCode(65 + idx)}. {ans}
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {gameState === 'gameover' && (
+                        <div className="card text-center p-5 border-danger">
+                            <h2 className="text-danger">Game Over!</h2>
+                            <p className="lead">You walked away with: <strong>{score}</strong></p>
+                            <button className="btn btn-primary mt-3" onClick={startGame}>Play Again</button>
+                        </div>
+                    )}
+
+                    {gameState === 'win' && (
+                        <div className="card text-center p-5 border-success">
+                            <h2 className="text-success">Congratulations! You Won!</h2>
+                            <p className="lead">Final Score: <strong>{score}</strong></p>
+                            <button className="btn btn-primary mt-3" onClick={startGame}>Play Again</button>
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
+

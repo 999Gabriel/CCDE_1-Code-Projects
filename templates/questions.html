@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>All Questions</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css">
+</head>
+<body>
+    <div class="container mt-5">
+        <h2 class="mb-4">All Questions</h2>
+        <a class="btn btn-secondary mb-3" href="/" role="button">Back to Home</a>
+
+        <table id="questionsTable" class="display" style="width:100%">
+            <thead>
+                <tr>
+                    <th>Level</th>
+                    <th>Question</th>
+                    <th>Correct Answer</th>
+                    <th>Info</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for q in questions %}
+                <tr>
+                    <td>{{ q.level }}</td>
+                    <td>{{ q.text }}</td>
+                    <td>{{ q.correct_answer }}</td>
+                    <td>{{ q.info }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+            <tfoot>
+                <tr>
+                    <th>Level</th>
+                    <th>Question</th>
+                    <th>Correct Answer</th>
+                    <th>Info</th>
+                </tr>
+            </tfoot>
+        </table>
+    </div>
+
+    <script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+    <script>
+        $(document).ready(function() {
+            $('#questionsTable').DataTable();
+        });
+    </script>
+</body>
+</html>

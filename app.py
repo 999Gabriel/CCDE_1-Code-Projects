@@ -1,7 +1,9 @@
 from flask import Flask, render_template, session, jsonify, request
-from model import read_questions, get_rand_question
+from flask_restful import Resource, Api, reqparse
+from model import read_questions, get_rand_question, Question
 
 app = Flask(__name__)
+api = Api(app)
 app.secret_key = 'super_secret_key_for_millionaire_game'  # Required for session
 
 # Load questions once at startup
@@ -150,6 +152,105 @@ def api_answer():
 @app.route('/api/questions', methods=['GET'])
 def api_all_questions():
     return jsonify([q.to_dict() for q in questions])
+
+# --- API Resources ---
+
+class QuestionResource(Resource):
+    def get(self, question_id):
+        question = next((q for q in questions if q.id == question_id), None)
+        if question:
+            return jsonify(question.to_dict())
+        return {'message': 'Question not found'}, 404
+
+    def delete(self, question_id):
+        global questions
+        question = next((q for q in questions if q.id == question_id), None)
+        if question:
+            questions = [q for q in questions if q.id != question_id]
+            return {'message': 'Question deleted'}
+        return {'message': 'Question not found'}, 404
+
+    def put(self, question_id):
+        data = request.get_json()
+        if not data:
+            return {'message': 'No input data provided'}, 400
+
+        question = next((q for q in questions if q.id == question_id), None)
+        if not question:
+            return {'message': 'Question not found'}, 404
+
+        if 'level' in data:
+            question.level = int(data['level'])
+        if 'text' in data:
+            question.text = data['text']
+        if 'info' in data:
+            question.info = data.get('info', "")
+
+        # If correct_answer or wrong_answers changed, we need to update answers list (shuffle)
+        should_reshuffle = False
+
+        if 'correct_answer' in data:
+            question.correct_answer = data['correct_answer']
+            should_reshuffle = True
+
+        if 'wrong_answers' in data:
+            # Expecting a list of strings
+            question.wrong_answers = data['wrong_answers']
+            should_reshuffle = True
+
+        if should_reshuffle:
+            question.__post_init__()
+
+        return jsonify(question.to_dict())
+
+
+class QuestionsListResource(Resource):
+    def get(self):
+        return jsonify([q.to_dict() for q in questions])
+
+    def post(self):
+        data = request.get_json()
+        if not data:
+            return {'message': 'No input data provided'}, 400
+
+        # Basic validation
+        required_fields = ['level', 'text', 'correct_answer', 'wrong_answers']
+        for field in required_fields:
+            if field not in data:
+                return {'message': f'Missing field: {field}'}, 400
+
+        new_id = max([q.id for q in questions]) + 1 if questions else 1
+
+        new_question = Question(
+            id=new_id,
+            level=int(data['level']),
+            text=data['text'],
+            correct_answer=data['correct_answer'],
+            wrong_answers=data['wrong_answers'], # Expecting list
+            info=data.get('info', "")
+        )
+        questions.append(new_question)
+        return jsonify(new_question.to_dict())
+
+
+class QuestionSearchResource(Resource):
+    def get(self, query):
+        results = [q for q in questions if query.lower() in q.text.lower() or any(query.lower() in ans.lower() for ans in q.answers)]
+        return jsonify([q.to_dict() for q in results])
+
+# Register Resources
+api.add_resource(QuestionResource, '/api/questions/<int:question_id>')
+api.add_resource(QuestionsListResource, '/api/questions')
+api.add_resource(QuestionSearchResource, '/api/questions/search/<string:query>')
+
+
+@app.route('/game_random_question')
+def game_random_question():
+    level = request.args.get('level', default=1, type=int)
+    question = get_rand_question(level, questions)
+    if question:
+        return jsonify(question.to_dict())
+    return jsonify({'message': 'No question found for this level'}), 404
 
 if __name__ == '__main__':
     app.run(debug=True)

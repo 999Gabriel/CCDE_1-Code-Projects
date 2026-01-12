@@ -1,0 +1,97 @@
+# Version control
+.git/
+.svn/
+.hg/
+
+# Dependencies
+node_modules/
+vendor/
+.venv/
+venv/
+env/
+__pycache__/
+*.pyc
+.eggs/
+*.egg-info/
+
+# Build outputs
+dist/
+build/
+target/
+out/
+.next/
+.nuxt/
+.output/
+coverage/
+
+# IDE/Editor
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.project
+.classpath
+.settings/
+
+# OS files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Package lock files
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+Cargo.lock
+poetry.lock
+Pipfile.lock
+composer.lock
+Gemfile.lock
+
+# Binary/Media
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.ico
+*.svg
+*.webp
+*.woff
+*.woff2
+*.ttf
+*.eot
+*.otf
+*.mp3
+*.mp4
+*.wav
+*.ogg
+*.webm
+*.avi
+*.mov
+*.zip
+*.tar
+*.gz
+*.rar
+*.7z
+*.pdf
+*.doc
+*.docx
+*.xls
+*.xlsx
+*.ppt
+*.pptx
+
+# Logs and databases
+*.log
+*.sqlite
+*.sqlite3
+*.db
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# ctxpack
+.ctxpack/

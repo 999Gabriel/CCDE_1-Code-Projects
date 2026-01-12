@@ -1,0 +1,13 @@
+requests
+Flask
+Flask-RESTful
+Flask-Session2
+Flask-SQLAlchemy
+dataclasses
+flask-mqtt
+flask-socketio
+eventlet
+Flask-Bootstrap
+plotly
+plotly.express
+pandas

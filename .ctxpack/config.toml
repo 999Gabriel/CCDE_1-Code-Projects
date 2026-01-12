@@ -1,0 +1,35 @@
+# ctxpack configuration
+# See https://github.com/gabriel/ctxpack for documentation
+
+[pack]
+# Maximum number of files to include
+max_files = 20
+
+# Maximum total output size in bytes
+max_bytes = 100000
+
+# File extensions to include
+extensions = [".py", ".pyi", ".js", ".jsx", ".ts", ".tsx", ".java", ".kt", ".scala", ".go", ".rs", ".rb", ".php", ".c", ".cpp", ".cc", ".h", ".hpp", ".cs", ".swift", ".md", ".mdx", ".json", ".yaml", ".yml", ".toml", ".sql", ".sh", ".bash", ".html", ".css", ".scss", ".vue", ".svelte"]
+
+# Exclude test files (files matching test patterns)
+exclude_tests = true
+
+# Selection mode: "simple" (recency + size) or "smart" (adds import analysis)
+mode = "simple"
+
+[scoring]
+# Weight for file recency (0.0 to 1.0)
+recency_weight = 0.7
+
+# Weight for file size - smaller files score higher (0.0 to 1.0)
+size_weight = 0.3
+
+# Boost for files that import other files (smart mode)
+import_boost = 0.1
+
+# Boost for files that are referenced by others (smart mode)
+reference_boost = 0.05
+
+[watch]
+# Seconds to wait after last file change before repacking
+debounce_seconds = 1.0

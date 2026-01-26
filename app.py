@@ -1,14 +1,21 @@
 from flask import Flask, render_template, session, jsonify, request
 from flask_restful import Resource, Api, reqparse
-from model import read_questions, get_rand_question, Question
+from model import get_rand_question, Question, db
+import os
 
 app = Flask(__name__)
 api = Api(app)
 app.secret_key = 'super_secret_key_for_millionaire_game'  # Required for session
 
-# Load questions once at startup
-QUESTIONS_FILE = 'millionaire.txt'
-questions = read_questions(QUESTIONS_FILE)
+# Database Configuration
+basedir = os.path.abspath(os.path.dirname(__file__))
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + os.path.join(basedir, 'millionaire.sqlite3')
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+db.init_app(app)
+
+# questions = read_questions(QUESTIONS_FILE) REMOVED
+
 
 @app.route('/')
 def index():
@@ -43,23 +50,13 @@ def game(answer=-1):
                 session.pop('correct_index', None)
                 return render_template('game_over.html', score=final_score)
 
-    # Get a new question for the current level
-    # Note: In a real game we might want to persist the question if the user refreshes,
-    # but for this exercise we'll just fetch a random one or keep the current one if we haven't answered yet.
-    # However, the prompt implies a flow where we answer and get a new one.
 
-    # If we just answered correctly (or started), we need a new question.
-    # But if we are just loading the page without an answer (answer=-1), we might want to keep the current question if it exists?
-    # The prompt says: "Wichtig ist hier, die aktuelle richtige Position der Antwort in der Session zu merken"
-
-    # Let's simplify: Always get a question for the current level.
-    # If we want to prevent cheating by refresh, we would store the current question ID in session.
-    # For this exercise, let's just get a random question for the level.
-
-    q = get_rand_question(current_level, questions)
+    # Get a random question for the current level
+    q = get_rand_question(current_level)
 
     if not q:
         # No more questions for this level (Win?)
+
         final_score = session.get('score', 0)
         session.pop('level', None)
         session.pop('score', None)
@@ -74,6 +71,7 @@ def game(answer=-1):
 
 @app.route('/questions')
 def all_questions():
+    questions = Question.query.all()
     return render_template('questions.html', questions=questions)
 
 @app.route('/react')
@@ -94,7 +92,7 @@ def api_question():
         return jsonify({'error': 'Game not started'}), 400
 
     current_level = session['level']
-    q = get_rand_question(current_level, questions)
+    q = get_rand_question(current_level)
 
     if not q:
         # No more questions (Win)
@@ -151,22 +149,23 @@ def api_answer():
 
 @app.route('/api/questions', methods=['GET'])
 def api_all_questions():
+    questions = Question.query.all()
     return jsonify([q.to_dict() for q in questions])
 
 # --- API Resources ---
 
 class QuestionResource(Resource):
     def get(self, question_id):
-        question = next((q for q in questions if q.id == question_id), None)
+        question = Question.query.get(question_id)
         if question:
             return jsonify(question.to_dict())
         return {'message': 'Question not found'}, 404
 
     def delete(self, question_id):
-        global questions
-        question = next((q for q in questions if q.id == question_id), None)
+        question = Question.query.get(question_id)
         if question:
-            questions = [q for q in questions if q.id != question_id]
+            db.session.delete(question)
+            db.session.commit()
             return {'message': 'Question deleted'}
         return {'message': 'Question not found'}, 404
 
@@ -175,7 +174,7 @@ class QuestionResource(Resource):
         if not data:
             return {'message': 'No input data provided'}, 400
 
-        question = next((q for q in questions if q.id == question_id), None)
+        question = Question.query.get(question_id)
         if not question:
             return {'message': 'Question not found'}, 404
 
@@ -186,26 +185,25 @@ class QuestionResource(Resource):
         if 'info' in data:
             question.info = data.get('info', "")
 
-        # If correct_answer or wrong_answers changed, we need to update answers list (shuffle)
-        should_reshuffle = False
-
         if 'correct_answer' in data:
             question.correct_answer = data['correct_answer']
-            should_reshuffle = True
+            # Removing cached shuffled list so it regenerates on next access
+            if hasattr(question, '_shuffled_answers'):
+                del question._shuffled_answers
 
         if 'wrong_answers' in data:
-            # Expecting a list of strings
+            # Setter handles mapping to answer2, answer3, answer4
             question.wrong_answers = data['wrong_answers']
-            should_reshuffle = True
+            if hasattr(question, '_shuffled_answers'):
+                del question._shuffled_answers
 
-        if should_reshuffle:
-            question.__post_init__()
-
+        db.session.commit()
         return jsonify(question.to_dict())
 
 
 class QuestionsListResource(Resource):
     def get(self):
+        questions = Question.query.all()
         return jsonify([q.to_dict() for q in questions])
 
     def post(self):
@@ -219,23 +217,39 @@ class QuestionsListResource(Resource):
             if field not in data:
                 return {'message': f'Missing field: {field}'}, 400
 
-        new_id = max([q.id for q in questions]) + 1 if questions else 1
+        new_question = Question()
+        new_question.level = int(data['level'])
+        new_question.text = data['text']
+        new_question.correct_answer = data['correct_answer']
+        new_question.wrong_answers = data['wrong_answers'] # Uses setter
+        new_question.info = data.get('info', "")
 
-        new_question = Question(
-            id=new_id,
-            level=int(data['level']),
-            text=data['text'],
-            correct_answer=data['correct_answer'],
-            wrong_answers=data['wrong_answers'], # Expecting list
-            info=data.get('info', "")
-        )
-        questions.append(new_question)
+        # ID is auto-increment usually, let DB handle it
+
+        db.session.add(new_question)
+        db.session.commit()
+
         return jsonify(new_question.to_dict())
 
 
 class QuestionSearchResource(Resource):
     def get(self, query):
-        results = [q for q in questions if query.lower() in q.text.lower() or any(query.lower() in ans.lower() for ans in q.answers)]
+        # ILIKE is not standard in SQLite but SQLAlchemy emulates or we use logic.
+        # For simplicity let's use contains.
+        search = f"%{query}%"
+        # Search in text or any of the answers.
+        # It's complex to search in all answer columns in one go cleanly OR logic.
+        from sqlalchemy import or_
+        results = Question.query.filter(
+            or_(
+                Question.text.like(search),
+                Question.correct_answer.like(search),
+                Question.answer2.like(search),
+                Question.answer3.like(search),
+                Question.answer4.like(search)
+            )
+        ).all()
+
         return jsonify([q.to_dict() for q in results])
 
 # Register Resources
@@ -247,7 +261,7 @@ api.add_resource(QuestionSearchResource, '/api/questions/search/<string:query>')
 @app.route('/game_random_question')
 def game_random_question():
     level = request.args.get('level', default=1, type=int)
-    question = get_rand_question(level, questions)
+    question = get_rand_question(level)
     if question:
         return jsonify(question.to_dict())
     return jsonify({'message': 'No question found for this level'}), 404
